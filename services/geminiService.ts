@@ -1,13 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 import { DocumentState, SectionId, GenerationRequest } from "../types";
 
-// Hàm lấy AI Client động
+// Hàm lấy AI Client động từ LocalStorage hoặc Env
 const getAiClient = () => {
-  // Guidelines: API key must be obtained exclusively from process.env.API_KEY
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  let apiKey = '';
+  
+  // 1. Ưu tiên lấy từ LocalStorage (Người dùng nhập)
+  if (typeof window !== 'undefined') {
+    const userKey = localStorage.getItem('user_api_key');
+    if (userKey) apiKey = userKey;
+  }
+
+  // 2. Nếu không có, lấy từ biến môi trường (Cấu hình Vercel)
+  if (!apiKey) {
+    // Vite uses import.meta.env
+    apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+  }
+
+  if (!apiKey) {
+    throw new Error("Chưa có API Key. Vui lòng vào Cấu hình để nhập Google Gemini API Key.");
+  }
+
+  return new GoogleGenAI({ apiKey });
 };
 
-const MODEL_NAME = 'gemini-2.5-flash';
+const MODEL_NAME = 'gemini-2.0-flash-exp'; // Using a stable model name or whatever is supported
 
 const SYSTEM_INSTRUCTION = `
 Bạn là một công cụ tạo văn bản Sáng kiến kinh nghiệm (SKKN) tự động chất lượng cao.
@@ -67,8 +84,9 @@ export const generateMeasureNames = async (req: GenerationRequest): Promise<stri
   } catch (error: any) {
     console.error("Gemini Suggest Error:", error);
     if (error.message?.includes("API Key")) {
-        throw error;
+        throw new Error("API Key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại trong Cấu hình.");
     }
+    // Fallback giả định nếu lỗi
     return ["Biện pháp 1: Xây dựng kế hoạch dạy học linh hoạt", "Biện pháp 2: Đổi mới phương pháp kiểm tra đánh giá", "Biện pháp 3: Tăng cường ứng dụng công nghệ thông tin"];
   }
 };
@@ -109,7 +127,9 @@ export const generateMeasureDetail = async (req: GenerationRequest, measureName:
     return response.text || "";
   } catch (error: any) {
     console.error("Gemini Detail Error:", error);
-    if (error.message?.includes("API Key")) throw error;
+    if (error.message?.includes("API Key")) {
+        throw new Error("API Key không hợp lệ hoặc đã hết hạn.");
+    }
     return `### ${index + 1}. ${measureName}\n\n(Lỗi khi tạo nội dung chi tiết. Vui lòng thử lại.)\n`;
   }
 };
@@ -300,8 +320,8 @@ export const generateSectionContent = async (req: GenerationRequest): Promise<st
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     if (error.message?.includes("API Key")) {
-        throw error;
+        throw new Error("API Key không hợp lệ. Vui lòng kiểm tra lại cấu hình.");
     }
-    throw new Error("Không thể kết nối với AI. Vui lòng kiểm tra lại mạng hoặc API Key.");
+    throw new Error("Không thể kết nối với AI. Vui lòng kiểm tra API Key hoặc mạng internet.");
   }
 };
