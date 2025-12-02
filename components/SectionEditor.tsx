@@ -59,12 +59,7 @@ const SectionEditor: React.FC<SectionEditorProps> = ({
 
   // Hiệu ứng đổi tin nhắn loading (Chỉ dùng khi KHÔNG PHẢI chế độ chờ thông minh)
   useEffect(() => {
-    let interval: number;
-    if (isGenerating && measureMode !== 'writing') {
-      // Nếu đang trong smartWait, loadingMsg sẽ được cập nhật bởi hàm đó, effect này không nên can thiệp
-      // Tuy nhiên logic cũ vẫn giữ cho các trường hợp đơn giản
-    }
-    return () => clearInterval(interval);
+    // Logic cũ đã được smartWait thay thế, giữ effect trống để tránh lỗi hook
   }, [isGenerating, measureMode]);
 
   // --- SMART WAIT FUNCTION ---
@@ -204,32 +199,34 @@ const SectionEditor: React.FC<SectionEditorProps> = ({
 
         fullContent += detail + "\n\n";
         
-        // Update content incrementally (real-time feel)
+        // Update document state incrementally (optional, but safer)
         onUpdate({ [section.id]: fullContent });
-        
-        // Ghi nhận thời gian gọi xong
-        lastApiCallTime.current = Date.now();
       }
 
-      setWritingProgress(100);
+      setLoadingMsg("Đang tổng hợp và hoàn thiện văn bản...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      onUpdate({ [section.id]: fullContent });
       setMeasureMode('done');
-      notify("Đã hoàn thành viết chi tiết tất cả biện pháp!", "success");
+      notify("Đã viết xong tất cả biện pháp!", "success");
+      
+      lastApiCallTime.current = Date.now();
 
     } catch (error: any) {
       console.error(error);
-      notify("Lỗi trong quá trình viết chi tiết. Vui lòng thử lại sau ít phút.", "error");
-      setMeasureMode('review');
+      notify(`Lỗi khi viết biện pháp: ${error.message}`, "error");
     } finally {
       setIsGenerating(false);
+      setWritingProgress(0);
     }
   };
 
-  // --- STANDARD GENERATION (Legacy for other sections) ---
+  // --- STANDARD GENERATION (OTHER SECTIONS) ---
   const handleStandardGenerate = async () => {
     if (!validateRequest()) return;
-
+    
     setIsGenerating(true);
-    setLoadingMsg("AI đang phân tích yêu cầu...");
+    setLoadingMsg(MOCK_LOADING_MESSAGES[0]);
 
     try {
       // 1. Kiểm tra rate limit
@@ -243,363 +240,335 @@ const SectionEditor: React.FC<SectionEditorProps> = ({
       });
       
       onUpdate({ [section.id]: content });
-      notify("AI đã tạo nội dung thành công!", "success");
+      notify("Đã viết xong nội dung!", "success");
       
       // 3. Ghi lại thời gian
       lastApiCallTime.current = Date.now();
 
     } catch (error: any) {
       console.error(error);
-      notify(`Lỗi: ${error.message || "Hệ thống đang bận, vui lòng thử lại sau 10 giây."}`, "error");
+      notify(error.message || "Có lỗi xảy ra khi tạo nội dung.", "error");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const currentContent = section.id === SectionId.GENERAL_INFO 
-    ? '' 
-    : (documentState[section.id as keyof DocumentState] as string) || '';
-
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-     onUpdate({ [section.id]: e.target.value });
-  };
-
-  // --- RENDER: GENERAL INFO FORM ---
+  // RENDER GENERAL INFO
   if (section.id === SectionId.GENERAL_INFO) {
     return (
-      <div className="max-w-3xl mx-auto pt-10 px-6 relative">
-        {/* LOCKED OVERLAY */}
-        {isLocked && (
-          <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl">
-            <div className="bg-red-50 border border-red-200 p-6 rounded-xl shadow-lg max-w-md text-center">
-              <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-              <h3 className="text-xl font-bold text-red-800 mb-2">Tài khoản hết lượt</h3>
-              <p className="text-red-700 mb-4">Vui lòng nạp thêm lượt để mở khóa tính năng chỉnh sửa và lưu thông tin.</p>
-            </div>
+      <div className="p-8 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="bg-white rounded-2xl shadow-sm border border-indigo-50 p-8">
+          <div className="flex items-center gap-3 mb-6 text-indigo-800">
+            <Sparkles className="fill-indigo-100" />
+            <h2 className="text-2xl font-bold">Thiết lập thông tin chung</h2>
           </div>
-        )}
-
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">{section.title}</h2>
-          <p className="text-gray-500">{section.description}</p>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-6">
-           {section.guideContent && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-900 text-sm leading-relaxed mb-4">
-               <div className="flex items-center gap-2 font-bold mb-2 text-amber-700">
-                  <Lightbulb size={18} />
-                  Gợi ý chuyên môn
-               </div>
-               <div className="whitespace-pre-line pl-6">{section.guideContent}</div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tên đề tài SKKN</label>
-            <input
-              type="text"
-              value={localTopic}
-              onChange={(e) => setLocalTopic(e.target.value)}
-              placeholder="Ví dụ: Một số biện pháp giúp học sinh lớp 4 học tốt phân môn Lịch sử"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none bg-white text-black"
-              disabled={isLocked}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Môn học / Lĩnh vực</label>
-              <input
-                type="text"
-                value={localSubject}
-                onChange={(e) => setLocalSubject(e.target.value)}
-                placeholder="Ví dụ: Lịch sử, Toán, Công tác chủ nhiệm..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white text-black"
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Tên đề tài sáng kiến</label>
+              <input 
+                type="text" 
+                value={localTopic}
+                onChange={(e) => setLocalTopic(e.target.value)}
+                placeholder={section.placeholder}
+                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-black placeholder-gray-400 font-medium"
                 disabled={isLocked}
               />
+              <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                <Lightbulb size={12} className="text-yellow-500" />
+                Mẹo: Tên đề tài nên chứa "Biện pháp" và "Đối tượng áp dụng".
+              </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Khối lớp áp dụng</label>
-              <input
-                type="text"
-                value={localGrade}
-                onChange={(e) => setLocalGrade(e.target.value)}
-                placeholder="Ví dụ: Lớp 4"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white text-black"
-                disabled={isLocked}
-              />
-            </div>
-          </div>
 
-          <div className="flex justify-end pt-4">
-            <button
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Lĩnh vực / Môn học</label>
+                <input 
+                  type="text" 
+                  value={localSubject}
+                  onChange={(e) => setLocalSubject(e.target.value)}
+                  placeholder="Ví dụ: Toán học, Tiếng Việt..."
+                  className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-black placeholder-gray-400"
+                  disabled={isLocked}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Khối lớp áp dụng</label>
+                <input 
+                  type="text" 
+                  value={localGrade}
+                  onChange={(e) => setLocalGrade(e.target.value)}
+                  placeholder="Ví dụ: Lớp 5"
+                  className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white text-black placeholder-gray-400"
+                  disabled={isLocked}
+                />
+              </div>
+            </div>
+
+            <button 
               onClick={handleGeneralInfoSave}
               disabled={isLocked}
-              className={`flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-sm ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-bold flex items-center gap-2 shadow-lg shadow-indigo-200 disabled:bg-gray-400 disabled:shadow-none"
             >
-              <Save size={18} />
-              Lưu thông tin
+              <Save size={18} /> Lưu thông tin
             </button>
           </div>
         </div>
+        
+        {/* LOCKED OVERLAY */}
+        {isLocked && (
+           <div className="fixed inset-0 bg-gray-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+             <div className="bg-white rounded-2xl p-8 max-w-md text-center shadow-2xl animate-in zoom-in-95">
+               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                 <Lock size={32} className="text-red-600" />
+               </div>
+               <h3 className="text-xl font-bold text-gray-900 mb-2">Tài khoản hết lượt sử dụng</h3>
+               <p className="text-gray-500 mb-6">
+                 Vui lòng nạp thêm lượt để mở khóa tính năng chỉnh sửa và sử dụng AI nâng cao.
+               </p>
+               <button className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors">
+                 Nạp ngay
+               </button>
+             </div>
+           </div>
+        )}
       </div>
     );
   }
 
-  // --- RENDER: CONTENT GENERATOR SECTIONS ---
+  // RENDER SECTIONS
   return (
-    <div className="max-w-4xl mx-auto pt-6 px-6 pb-20 relative">
-       {/* LOCKED OVERLAY */}
-       {isLocked && (
-          <div className="absolute inset-0 z-50 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-xl h-full">
-            <div className="bg-white border-2 border-red-100 p-8 rounded-2xl shadow-2xl max-w-lg text-center transform scale-100">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                 <Lock className="w-8 h-8 text-red-600" />
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden relative">
+      
+      {/* LOCKED OVERLAY FOR SECTIONS */}
+      {isLocked && (
+          <div className="absolute inset-0 bg-white/60 z-10 backdrop-blur-[2px] flex flex-col items-center justify-center text-center p-6">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl border border-red-100 max-w-lg">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <Lock size={32} className="text-red-600" />
               </div>
-              <h3 className="text-2xl font-extrabold text-gray-900 mb-2">Đã hết lượt sử dụng</h3>
-              <p className="text-gray-600 mb-6 leading-relaxed">
-                Tài khoản của bạn đã hết lượt (Credits: 0). <br/>
-                Vui lòng nạp thêm lượt để tiếp tục sử dụng AI và chỉnh sửa văn bản.
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Tính năng bị khóa</h2>
+              <p className="text-gray-600 mb-6">
+                Bạn đã sử dụng hết lượt miễn phí. Để tiếp tục soạn thảo và sử dụng AI, vui lòng nạp thêm lượt.
               </p>
-              <div className="text-sm font-medium text-indigo-600 bg-indigo-50 py-2 px-4 rounded-full inline-block">
-                Bấm vào nút "Nạp ngay" trên thanh bên trái
-              </div>
+              <button className="px-8 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg hover:shadow-red-200">
+                Mở khóa ngay
+              </button>
             </div>
           </div>
-        )}
-
-      <div className="mb-6 flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">{section.title}</h2>
-          <p className="text-sm text-gray-500">{section.description}</p>
-        </div>
-        
-        {section.guideContent && (
-          <button
-            onClick={() => setShowGuide(!showGuide)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors border shadow-sm ${
-              showGuide 
-                ? 'bg-amber-100 text-amber-800 border-amber-200' 
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            <Lightbulb size={18} className={showGuide ? "text-amber-600" : "text-gray-400"} />
-            {showGuide ? "Ẩn gợi ý" : "Gợi ý viết chuẩn"}
-          </button>
-        )}
-      </div>
-
-      {showGuide && section.guideContent && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
-           <div className="flex justify-between items-start mb-2">
-             <h4 className="font-bold text-amber-800 flex items-center gap-2">
-               <Lightbulb size={20} className="text-amber-600" />
-               Hướng dẫn chuyên môn
-             </h4>
-             <button onClick={() => setShowGuide(false)} className="text-amber-600 hover:bg-amber-100 rounded p-1">
-               <X size={16} />
-             </button>
-           </div>
-           <div className="text-amber-900 text-sm whitespace-pre-line leading-relaxed pl-7">
-             {section.guideContent}
-           </div>
-        </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-4">
-          <div className={`p-4 rounded-xl border shadow-sm sticky top-4 transition-all duration-300 bg-white border-indigo-100 ${isLocked ? 'opacity-50' : ''}`}>
-            
-            {/* Header Box AI */}
-            <div className="flex items-center justify-between mb-3 border-b border-indigo-50 pb-2">
-              <div className="flex items-center gap-2 font-semibold text-indigo-700">
-                <Bot size={20} />
-                <h3>Trợ lý AI</h3>
-              </div>
-              {!isLocked && (
-                <span className="text-xs font-bold px-2 py-1 rounded-full border text-green-600 bg-green-50 border-green-100">
-                  Đã sẵn sàng
-                </span>
+      {/* LEFT: INPUT AREA */}
+      <div className={`w-1/3 border-r border-gray-200 bg-white flex flex-col ${isLocked ? 'pointer-events-none opacity-50' : ''}`}>
+        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-2">{section.title}</h2>
+            <p className="text-sm text-gray-500 leading-relaxed">{section.description}</p>
+          </div>
+
+          {/* Guide Button */}
+          {section.guideContent && (
+             <div className="mb-4">
+               <button 
+                onClick={() => setShowGuide(!showGuide)}
+                className="text-xs font-bold text-teal-600 flex items-center gap-1 hover:text-teal-700 bg-teal-50 px-3 py-2 rounded-lg border border-teal-100 w-full justify-center transition-colors"
+               >
+                 <Lightbulb size={14} /> 
+                 {showGuide ? "Ẩn hướng dẫn" : "💡 Hướng dẫn viết (Gợi ý chuyên môn)"}
+               </button>
+               
+               {showGuide && (
+                 <div className="mt-2 p-4 bg-teal-50 rounded-xl border border-teal-100 text-sm text-teal-900 whitespace-pre-line leading-relaxed animate-in slide-in-from-top-2">
+                   {section.guideContent}
+                 </div>
+               )}
+             </div>
+          )}
+
+          {/* DEEP DIVE UI FOR MEASURES SECTION */}
+          {section.id === SectionId.MEASURES ? (
+            <div className="space-y-4">
+              {/* STEP 1: INITIAL */}
+              {measureMode === 'init' && (
+                <>
+                  <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                    <p className="text-sm font-semibold text-indigo-900 mb-2 flex items-center gap-2">
+                       <Sparkles size={16} /> Chế độ viết sâu (Deep Dive)
+                    </p>
+                    <p className="text-xs text-indigo-700 mb-4">
+                      AI sẽ đề xuất tên các biện pháp trước. Bạn có thể chỉnh sửa danh sách này, sau đó AI sẽ viết chi tiết từng biện pháp một để đảm bảo độ dài và chất lượng.
+                    </p>
+                    
+                    <label className="block text-xs font-bold text-gray-700 mb-1 uppercase">
+                       Gợi ý thêm cho AI (Tùy chọn)
+                    </label>
+                    <textarea 
+                      className="w-full p-3 border border-gray-200 rounded-lg text-sm h-24 focus:ring-2 focus:ring-indigo-500 outline-none resize-none bg-white text-black"
+                      placeholder="Ví dụ: Tập trung vào trò chơi học tập, ứng dụng CNTT..."
+                      value={userContext}
+                      onChange={(e) => setUserContext(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSuggestMeasures}
+                    disabled={isGenerating}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200 flex justify-center items-center gap-2"
+                  >
+                    {isGenerating ? <Loader2 className="animate-spin" /> : <ListPlus size={20} />}
+                    Bước 1: Đề xuất tên biện pháp
+                  </button>
+                </>
               )}
-            </div>
 
-            {/* SPECIAL RENDER FOR MEASURES SECTION (DEEP DIVE MODE) */}
-            {section.id === SectionId.MEASURES ? (
-              <div className="space-y-4">
-                 {measureMode === 'init' && (
-                    <>
-                      <p className="text-xs text-gray-500 leading-relaxed">
-                        Chế độ chuyên sâu: AI sẽ đề xuất danh sách biện pháp trước, bạn duyệt xong AI mới viết chi tiết từng cái.
-                      </p>
-                      <button
-                        onClick={handleSuggestMeasures}
-                        disabled={isGenerating || isLocked}
-                        className="w-full mt-2 flex justify-center items-center gap-2 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm shadow-md"
-                      >
-                         {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <ListPlus size={16} />}
-                         Bước 1: Đề xuất tên Biện pháp
+              {/* STEP 2: REVIEW & EDIT */}
+              {measureMode === 'review' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right">
+                   <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-gray-800">Danh sách biện pháp ({suggestedMeasures.length})</h3>
+                      <button onClick={handleAddMeasure} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded flex items-center gap-1 text-gray-700">
+                        <ListPlus size={12} /> Thêm
                       </button>
-                    </>
-                 )}
+                   </div>
+                   
+                   <div className="space-y-2">
+                     {suggestedMeasures.map((m, idx) => (
+                       <div key={idx} className="flex gap-2 items-center">
+                         <span className="text-xs font-bold text-gray-400 w-4">{idx + 1}.</span>
+                         <input 
+                            value={m}
+                            onChange={(e) => handleUpdateMeasure(idx, e.target.value)}
+                            className="flex-1 p-2 text-sm border border-gray-200 rounded-lg focus:border-indigo-500 outline-none bg-white text-black"
+                         />
+                         <button onClick={() => handleRemoveMeasure(idx)} className="text-red-400 hover:text-red-600 p-1">
+                           <Trash2 size={16} />
+                         </button>
+                       </div>
+                     ))}
+                   </div>
 
-                 {measureMode === 'suggesting' && (
-                    <div className="text-center py-6">
-                      <Loader2 size={32} className="animate-spin text-indigo-600 mx-auto mb-2" />
-                      <p className="text-xs text-indigo-600 font-medium">{loadingMsg}</p>
-                    </div>
-                 )}
+                   <div className="flex gap-2 pt-2">
+                      <button 
+                        onClick={() => setMeasureMode('init')}
+                        className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-semibold"
+                      >
+                        Quay lại
+                      </button>
+                      <button 
+                        onClick={handleWriteDeepContent}
+                        className="flex-[2] py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold flex justify-center items-center gap-2 shadow-md"
+                      >
+                        <Bot size={18} /> Bước 2: Viết chi tiết
+                      </button>
+                   </div>
+                </div>
+              )}
 
-                 {(measureMode === 'review' || measureMode === 'writing' || measureMode === 'done') && (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                         <span className="text-xs font-bold text-gray-700">Danh sách biện pháp:</span>
-                         {measureMode === 'review' && (
-                            <button onClick={handleAddMeasure} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
-                              <ListPlus size={12} /> Thêm
-                            </button>
-                         )}
-                      </div>
-                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                         {suggestedMeasures.map((measure, idx) => (
-                           <div key={idx} className="group bg-gray-50 p-2 rounded border border-gray-200 text-xs">
-                              {measureMode === 'review' ? (
-                                <div className="flex gap-2">
-                                   <input 
-                                     className="flex-1 bg-transparent outline-none border-b border-transparent focus:border-indigo-300 text-black"
-                                     value={measure}
-                                     onChange={(e) => handleUpdateMeasure(idx, e.target.value)}
-                                   />
-                                   <button onClick={() => handleRemoveMeasure(idx)} className="text-red-400 hover:text-red-600">
-                                      <Trash2 size={12} />
-                                   </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 text-gray-700">
-                                   {measureMode === 'writing' && idx < Math.floor((writingProgress/100) * suggestedMeasures.length) ? (
-                                      <CheckCircle size={12} className="text-green-500" />
-                                   ) : (
-                                      <span className="w-3 h-3 rounded-full bg-gray-300"></span>
-                                   )}
-                                   <span>{measure}</span>
-                                </div>
-                              )}
-                           </div>
-                         ))}
-                      </div>
+              {/* STEP 3: WRITING */}
+              {measureMode === 'writing' && (
+                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 text-center space-y-4 animate-in zoom-in-95">
+                   <div className="relative w-16 h-16 mx-auto">
+                     <div className="absolute inset-0 border-4 border-indigo-200 rounded-full"></div>
+                     <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+                     <Bot className="absolute inset-0 m-auto text-indigo-600" size={24} />
+                   </div>
+                   
+                   <div>
+                     <p className="font-bold text-indigo-900 text-lg mb-1">{loadingMsg}</p>
+                     <p className="text-xs text-indigo-600">Vui lòng không tắt trình duyệt...</p>
+                   </div>
 
-                      {measureMode === 'review' && (
-                        <button
-                          onClick={handleWriteDeepContent}
-                          disabled={isGenerating || isLocked || suggestedMeasures.length === 0}
-                          className="w-full mt-2 flex justify-center items-center gap-2 py-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium text-sm shadow-md"
-                        >
-                           <Play size={16} />
-                           Bước 2: Viết chi tiết (Deep Dive)
-                        </button>
-                      )}
+                   {/* Progress Bar */}
+                   <div className="w-full bg-indigo-200 rounded-full h-2 overflow-hidden">
+                     <div 
+                        className="bg-indigo-600 h-full transition-all duration-500 ease-out"
+                        style={{ width: `${writingProgress}%` }}
+                     ></div>
+                   </div>
+                   <p className="text-xs text-indigo-500 font-mono">{writingProgress}% hoàn thành</p>
+                </div>
+              )}
 
-                      {measureMode === 'writing' && (
-                        <div>
-                          <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mb-1">
-                             <div className="h-full bg-indigo-600 transition-all duration-500" style={{ width: `${writingProgress}%` }}></div>
-                          </div>
-                          <p className="text-[10px] text-center text-indigo-500 animate-pulse">{loadingMsg}</p>
-                        </div>
-                      )}
+              {/* DONE */}
+              {measureMode === 'done' && (
+                 <div className="text-center p-6 bg-green-50 rounded-xl border border-green-100">
+                    <CheckCircle className="mx-auto text-green-500 mb-2" size={32} />
+                    <p className="font-bold text-green-800">Đã hoàn thành!</p>
+                    <button 
+                      onClick={() => setMeasureMode('init')}
+                      className="mt-4 text-sm text-indigo-600 hover:underline"
+                    >
+                      Viết lại từ đầu
+                    </button>
+                 </div>
+              )}
 
-                      {measureMode === 'done' && (
-                        <button
-                          onClick={() => setMeasureMode('init')}
-                          className="w-full mt-2 flex justify-center items-center gap-2 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-xs"
-                        >
-                           <Edit3 size={14} />
-                           Làm lại từ đầu
-                        </button>
-                      )}
-                    </div>
-                 )}
-              </div>
-            ) : (
-              // STANDARD RENDER FOR OTHER SECTIONS
-              <>
-                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  AI sẽ tự động phân tích đề tài và ngữ cảnh để viết nội dung.
-                </p>
-
-                <label className="block text-xs text-indigo-600 mb-2 font-medium">
-                  {section.promptLabel}
+            </div>
+          ) : (
+            // STANDARD UI FOR OTHER SECTIONS
+            <>
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 flex justify-between">
+                  {section.promptLabel || "Hướng dẫn thêm cho AI (Tùy chọn)"}
+                  {userContext.length > 0 && <span className="text-indigo-600 cursor-pointer" onClick={() => setUserContext("")}>Xóa</span>}
                 </label>
-                
-                <textarea
-                  className="w-full p-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 outline-none resize-none bg-white text-black placeholder-gray-400"
-                  rows={4}
+                <textarea 
+                  className="w-full p-4 border border-gray-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none transition-all bg-white text-black placeholder-gray-400"
                   placeholder={section.placeholder}
                   value={userContext}
                   onChange={(e) => setUserContext(e.target.value)}
-                  disabled={isGenerating || isLocked}
                 />
-
-                <button
-                  onClick={handleStandardGenerate}
-                  disabled={isGenerating || isLocked}
-                  className={`w-full mt-4 flex justify-center items-center gap-2 py-3 rounded-lg transition-all font-medium text-sm shadow-md ${
-                    isGenerating || isLocked
-                      ? 'bg-gray-300 cursor-not-allowed text-gray-500 shadow-none' 
-                      : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg text-white transform hover:-translate-y-0.5 active:translate-y-0'
-                  }`}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Đang xử lý...
-                    </>
-                  ) : isLocked ? (
-                    <>
-                      <Lock size={16} />
-                      Đã khóa
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={16} />
-                      AI Phân tích & Gợi ý
-                    </>
-                  )}
-                </button>
-
-                {isGenerating && (
-                    <p className="text-xs text-center mt-3 text-indigo-500 animate-pulse font-medium">{loadingMsg}</p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="lg:col-span-2">
-           <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[70vh] ${isLocked ? 'opacity-50' : ''}`}>
-              <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-600 uppercase tracking-wider flex items-center gap-2">
-                  <Save size={14} />
-                  Soạn thảo văn bản
-                </span>
-                <span className="text-xs text-indigo-500 bg-indigo-50 px-2 py-1 rounded-full border border-indigo-100">Markdown enabled</span>
               </div>
-              <textarea
-                className="flex-1 w-full p-6 outline-none resize-none text-black bg-white leading-relaxed font-normal text-base"
-                style={{ fontFamily: 'Inter, sans-serif' }}
-                placeholder={isLocked ? "Nội dung bị khóa..." : "Nội dung AI gợi ý sẽ xuất hiện ở đây. Bạn có thể chỉnh sửa lại theo ý muốn..."}
-                value={currentContent}
-                onChange={handleContentChange}
-                disabled={isLocked}
-              />
-           </div>
-           <div className="mt-2 text-right">
-              <span className="text-xs text-green-600 italic flex items-center justify-end gap-1">
-                <CheckCircle size={12} /> Tự động lưu
-              </span>
-           </div>
+
+              <button
+                onClick={handleStandardGenerate}
+                disabled={isGenerating}
+                className={`w-full py-3.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-bold shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 group ${isGenerating ? 'cursor-not-allowed opacity-80' : 'hover:-translate-y-0.5'}`}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    <span className="animate-pulse">{loadingMsg}</span>
+                  </>
+                ) : (
+                  <>
+                    <Bot size={20} className="group-hover:rotate-12 transition-transform" />
+                    AI Phân tích & Gợi ý chi tiết
+                  </>
+                )}
+              </button>
+            </>
+          )}
+
         </div>
       </div>
+
+      {/* RIGHT: EDITOR AREA */}
+      <div className={`flex-1 bg-gray-50 p-6 overflow-hidden flex flex-col ${isLocked ? 'pointer-events-none opacity-50 filter blur-[1px]' : ''}`}>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
+          <div className="border-b border-gray-100 p-3 bg-gray-50 flex justify-between items-center">
+             <div className="flex gap-2">
+               <div className="w-3 h-3 rounded-full bg-red-400"></div>
+               <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+               <div className="w-3 h-3 rounded-full bg-green-400"></div>
+             </div>
+             <span className="text-xs font-mono text-gray-400">editor.md</span>
+          </div>
+          <textarea 
+            className="flex-1 w-full p-8 outline-none resize-none text-gray-800 leading-relaxed custom-scrollbar text-base bg-white placeholder-gray-300"
+            placeholder="Nội dung chi tiết sẽ hiện ở đây..."
+            value={documentState[section.id as keyof DocumentState] || ""}
+            onChange={(e) => onUpdate({ [section.id]: e.target.value })}
+            readOnly={isLocked} // Prevent manual edit if locked
+          />
+        </div>
+        <div className="mt-2 text-right">
+          <p className="text-xs text-gray-400">
+            {documentState[section.id as keyof DocumentState]?.length || 0} ký tự
+          </p>
+        </div>
+      </div>
+
     </div>
   );
 };

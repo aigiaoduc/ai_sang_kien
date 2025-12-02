@@ -139,7 +139,7 @@ export const exportToWord = async (documentState: DocumentState) => {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 3000 },
-      children: [new TextRun({ font: "Times New Roman", size: 28, italic: true, text: "..........., năm 20..." })]
+      children: [new TextRun({ font: "Times New Roman", size: 28, italics: true, text: "..........., năm 20..." })]
     }),
     
     // Page Break after title
