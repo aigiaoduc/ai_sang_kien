@@ -5,27 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@google/genai": "^0.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@google/genai": "*",
     "lucide-react": "^0.344.0",
     "docx": "^8.5.0",
     "file-saver": "^2.0.5",
     "@supabase/supabase-js": "^2.39.7"
   },
   "devDependencies": {
-    "@types/react": "^18.2.64",
-    "@types/react-dom": "^18.2.21",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "@types/file-saver": "^2.0.7",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.4.2",
-    "vite": "^5.1.5",
-    "autoprefixer": "^10.4.18",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1"
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "globals": "^15.9.0"
   }
 }
